@@ -1,8 +1,9 @@
-const CACHE = 'cardify-v1';
+const CACHE = 'cardify-v2';
+// Core shell is precached; the PDF engine (local or CDN) is cached on first use
+// by the fetch handler below, so the app keeps working offline afterwards.
 const ASSETS = [
   './', './index.html', './manifest.json', './icon.svg',
-  './icon-192.png', './icon-512.png',
-  './pdf.min.mjs', './pdf.worker.min.mjs'
+  './icon-192.png', './icon-512.png'
 ];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

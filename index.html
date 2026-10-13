@@ -173,8 +173,17 @@
 <div id="printSheet"><div class="sheet" id="sheetInner"></div></div>
 
 <script type="module">
-import * as pdfjsLib from './pdf.min.mjs';
-pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
+// PDF engine: vendored local copy first (fully offline), CDN fallback otherwise.
+const PDFJS_CDN = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/';
+let pdfjsLib, workerSrc;
+try {
+  pdfjsLib = await import('./pdf.min.mjs');
+  workerSrc = './pdf.worker.min.mjs';
+} catch (e) {
+  pdfjsLib = await import(PDFJS_CDN + 'pdf.min.mjs');
+  workerSrc = PDFJS_CDN + 'pdf.worker.min.mjs';
+}
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
 
 const $ = id => document.getElementById(id);
 const drop = $('drop'), fileInput = $('fileInput'), errBox = $('errBox');

@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Cardify — Offline PDF to ID Card Converter</title>
+<meta name="description" content="Convert PDF pages into print-ready ID cards, fully offline. Nothing ever leaves your device.">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f172a">
+<style>
+  :root{
+    --bg:#0f172a; --panel:#1e293b; --panel2:#16213a; --line:#334155;
+    --txt:#f1f5f9; --mut:#94a3b8; --acc:#38bdf6; --acc2:#0ea5e9;
+    --ok:#34d399; --warn:#fbbf24; --bad:#f87171; --r:14px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg); color:var(--txt); min-height:100vh;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  header{width:100%;max-width:920px;padding:22px 18px 6px;display:flex;align-items:center;gap:12px;}
+  header img{width:40px;height:40px;border-radius:10px;}
+  header h1{font-size:22px;margin:0;letter-spacing:.3px;}
+  header h1 span{color:var(--acc);}
+  header p{margin:2px 0 0;font-size:12.5px;color:var(--mut);}
+  .badge{margin-left:auto;font-size:11px;color:var(--ok);border:1px solid #14532d;background:#052e1b;
+    padding:4px 10px;border-radius:999px;white-space:nowrap;}
+  main{width:100%;max-width:920px;padding:14px 18px 60px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:16px;}
+  .card h2{margin:0 0 4px;font-size:16px;}
+  .card .sub{margin:0 0 14px;font-size:12.5px;color:var(--mut);}
+  #drop{
+    border:2px dashed var(--line);border-radius:var(--r);padding:38px 20px;text-align:center;
+    cursor:pointer;transition:.15s;background:var(--panel2);
+  }
+  #drop:hover,#drop.over{border-color:var(--acc);background:#0c1a2e;}
+  #drop .big{font-size:15px;font-weight:600;}
+  #drop .small{font-size:12.5px;color:var(--mut);margin-top:6px;}
+  #fileInput{display:none;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media(max-width:560px){.grid2{grid-template-columns:1fr;}}
+  label.f{display:block;font-size:12px;color:var(--mut);margin-bottom:6px;}
+  select,button,input[type=text]{
+    width:100%;padding:11px 12px;border-radius:10px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--txt);font-size:14px;
+  }
+  select:focus,button:focus{outline:2px solid var(--acc);outline-offset:1px;}
+  .btn{background:linear-gradient(180deg,var(--acc),var(--acc2));border:none;color:#04121f;
+    font-weight:700;cursor:pointer;margin-top:6px;}
+  .btn:active{transform:scale(.98);}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--txt);font-weight:600;}
+  .btn.danger{background:transparent;border:1px solid #7f1d1d;color:var(--bad);font-weight:600;}
+  .btn:disabled{opacity:.45;cursor:default;}
+  #pages{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
+  .pg{
+    width:74px;border:2px solid var(--line);border-radius:8px;overflow:hidden;cursor:pointer;
+    background:#0b1220;position:relative;flex:0 0 auto;
+  }
+  .pg img{width:100%;display:block;aspect-ratio:1/1.414;object-fit:contain;background:#0b1220;}
+  .pg .n{font-size:10.5px;text-align:center;padding:3px;color:var(--mut);}
+  .pg.off{opacity:.35;}
+  .pg.off::after{content:"✕";position:absolute;top:2px;right:6px;color:var(--bad);font-weight:700;}
+  #results{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;}
+  .rcard{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:10px;}
+  .rcard img{width:100%;border-radius:8px;display:block;background:#fff;}
+  .rcard .row{display:flex;gap:8px;margin-top:8px;}
+  .rcard .row button{margin-top:0;padding:8px;font-size:13px;}
+  .rcard .t{font-size:12px;color:var(--mut);margin:6px 2px 0;}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;}
+  .toolbar button{width:auto;flex:1 1 160px;}
+  .note{font-size:12px;color:var(--mut);margin-top:10px;line-height:1.5;}
+  .err{color:var(--bad);font-size:13px;margin-top:8px;}
+  .hidden{display:none !important;}
+  footer{font-size:11.5px;color:var(--mut);padding:18px;text-align:center;}
+  /* ---------- print sheet ---------- */
+  #printSheet{display:none;}
+  @media print{
+    body{background:#fff;}
+    header,main,footer,#app{display:none !important;}
+    #printSheet{display:block !important;}
+    @page{size:A4 portrait;margin:10mm;}
+    .sheet{display:flex;flex-wrap:wrap;gap:6mm;align-content:flex-start;}
+    .pcard{page-break-inside:avoid;border:0.4mm dashed #999;overflow:hidden;background:#fff;}
+    .pcard img{width:100%;height:100%;object-fit:fill;display:block;}
+  }
+</style>
+</head>
+<body>
+<div id="app" style="width:100%;display:flex;flex-direction:column;align-items:center;">
+<header>
+  <img src="icon.svg" alt="Cardify icon">
+  <div>
+    <h1>Cardi<span>fy</span></h1>
+    <p>Offline PDF → ID card converter</p>
+  </div>
+  <div class="badge">100% offline</div>
+</header>
+
+<main>
+  <section class="card">
+    <h2>1 · Choose your file</h2>
+    <p class="sub">PDF pages (or images) are converted to ID-card size. Everything runs in your browser — no uploads.</p>
+    <div id="drop" role="button" tabindex="0" aria-label="Choose PDF or images">
+      <div class="big">Tap to choose a PDF or images</div>
+      <div class="small">or drag &amp; drop here · each PDF page becomes one card</div>
+    </div>
+    <input type="file" id="fileInput" accept="application/pdf,image/*" multiple>
+    <div class="err hidden" id="errBox"></div>
+  </section>
+
+  <section class="card hidden" id="settingsCard">
+    <h2>2 · Card settings</h2>
+    <p class="sub" id="srcInfo"></p>
+    <div class="grid2">
+      <div>
+        <label class="f" for="cardSize">Card size</label>
+        <select id="cardSize">
+          <option value="85.6x53.98" selected>CR80 — 85.6 × 53.98 mm (standard ID)</option>
+          <option value="83.9x52.4">CR79 — 83.9 × 52.4 mm (slightly smaller)</option>
+        </select>
+      </div>
+      <div>
+        <label class="f" for="fitMode">Page fit</label>
+        <select id="fitMode">
+          <option value="fit" selected>Fit — whole page visible</option>
+          <option value="fill">Fill — crop to fill card</option>
+        </select>
+      </div>
+      <div>
+        <label class="f" for="orient">Orientation</label>
+        <select id="orient">
+          <option value="auto" selected>Auto — match each page</option>
+          <option value="landscape">Force landscape</option>
+          <option value="portrait">Force portrait</option>
+        </select>
+      </div>
+      <div>
+        <label class="f" for="dpi">Quality</label>
+        <select id="dpi">
+          <option value="150">150 DPI — smaller files</option>
+          <option value="300" selected>300 DPI — print quality</option>
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:12px;">
+      <label class="f">Pages to convert <span style="color:var(--mut)">(tap to include / exclude)</span></label>
+      <div id="pages"></div>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="convertBtn">Convert to ID cards</button>
+    </div>
+  </section>
+
+  <section class="card hidden" id="resultCard">
+    <h2>3 · Your ID cards</h2>
+    <p class="sub" id="resInfo"></p>
+    <div id="results"></div>
+    <div class="toolbar">
+      <button class="btn" id="printBtn">🖨 Print cut-sheet</button>
+      <button class="btn ghost" id="dlAllBtn">⬇ Download all PNG</button>
+      <button class="btn danger" id="resetBtn">Start over</button>
+    </div>
+    <p class="note">Print tip: in the print dialog set paper to <b>A4</b>, margins to <b>Default</b> and turn <b>off</b> “headers and footers”. Cards print at exact ID size with dashed cut guides.</p>
+  </section>
+</main>
+<footer>Made for quick, private ID-card work · no account · no internet needed after first load</footer>
+</div>
+
+<div id="printSheet"><div class="sheet" id="sheetInner"></div></div>
+
+<script type="module">
+import * as pdfjsLib from './pdf.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
+
+const $ = id => document.getElementById(id);
+const drop = $('drop'), fileInput = $('fileInput'), errBox = $('errBox');
+const settingsCard = $('settingsCard'), resultCard = $('resultCard');
+
+let pdfDoc = null, pdfName = '', imgFiles = [];
+let pageBitmaps = [];   // {page, canvas, include}
+let cards = [];         // {canvas, label, wMm, hMm}
+
+function showErr(msg){ errBox.textContent = msg; errBox.classList.remove('hidden'); }
+function clearErr(){ errBox.textContent=''; errBox.classList.add('hidden'); }
+
+drop.addEventListener('click', ()=>fileInput.click());
+drop.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();fileInput.click();} });
+['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop', e=>handleFiles(e.dataTransfer.files));
+fileInput.addEventListener('change', ()=>handleFiles(fileInput.files));
+
+async function handleFiles(files){
+  clearErr();
+  const list=[...files];
+  if(!list.length) return;
+  const pdf = list.find(f=>f.type==='application/pdf'||/\.pdf$/i.test(f.name));
+  imgFiles = list.filter(f=>f.type.startsWith('image/'));
+  pageBitmaps=[]; cards=[];
+  $('results').innerHTML=''; $('pages').innerHTML='';
+  resultCard.classList.add('hidden');
+
+  if(pdf){
+    try{
+      const buf = await pdf.arrayBuffer();
+      pdfDoc = await pdfjsLib.getDocument({data:buf}).promise;
+      pdfName = pdf.name.replace(/\.pdf$/i,'');
+      // thumbnails
+      for(let p=1;p<=pdfDoc.numPages;p++){
+        const page = await pdfDoc.getPage(p);
+        const vp = page.getViewport({scale:0.35});
+        const c = document.createElement('canvas');
+        c.width=vp.width; c.height=vp.height;
+        await page.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
+        pageBitmaps.push({page:p, canvas:c, include:true});
+      }
+      renderPageChips();
+      $('srcInfo').textContent = `${pdf.name} · ${pdfDoc.numPages} page${pdfDoc.numPages>1?'s':''}${imgFiles.length?` + ${imgFiles.length} image${imgFiles.length>1?'s':''}`:''}`;
+      settingsCard.classList.remove('hidden');
+      settingsCard.scrollIntoView({behavior:'smooth'});
+    }catch(e){
+      console.error(e);
+      showErr('Could not open that PDF. It may be password-protected or corrupted.');
+    }
+  } else if(imgFiles.length){
+    pdfDoc=null; pdfName='image';
+    for(const f of imgFiles){
+      const bmp = await createImageBitmap(f);
+      const c=document.createElement('canvas');
+      const s=Math.min(1, 260/Math.max(bmp.width,bmp.height));
+      c.width=Math.round(bmp.width*s); c.height=Math.round(bmp.height*s);
+      c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+      pageBitmaps.push({page:f.name, canvas:c, include:true});
+    }
+    renderPageChips();
+    $('srcInfo').textContent = `${imgFiles.length} image${imgFiles.length>1?'s':''} selected`;
+    settingsCard.classList.remove('hidden');
+    settingsCard.scrollIntoView({behavior:'smooth'});
+  } else {
+    showErr('Please choose a PDF file or images.');
+  }
+}
+
+function renderPageChips(){
+  const box=$('pages'); box.innerHTML='';
+  pageBitmaps.forEach((pb,i)=>{
+    const d=document.createElement('div');
+    d.className='pg'+(pb.include?'':' off');
+    d.innerHTML=`<img alt="page ${pb.page}"><div class="n">${typeof pb.page==='number'?'Page '+pb.page:pb.page.slice(0,14)}</div>`;
+    d.querySelector('img').src=pb.canvas.toDataURL('image/jpeg',0.7);
+    d.addEventListener('click',()=>{pb.include=!pb.include;d.classList.toggle('off',!pb.include);});
+    box.appendChild(d);
+  });
+}
+
+$('convertBtn').addEventListener('click', convert);
+
+async function convert(){
+  clearErr();
+  const [cw,ch]=$('cardSize').value.split('x').map(Number);
+  const fit=$('fitMode').value, orient=$('orient').value, dpi=+$('dpi').value;
+  const sel=pageBitmaps.filter(p=>p.include);
+  if(!sel.length){ showErr('Select at least one page to convert.'); return; }
+  $('convertBtn').disabled=true; $('convertBtn').textContent='Converting…';
+  cards=[];
+  try{
+    for(const pb of sel){
+      let src;
+      if(pdfDoc && typeof pb.page==='number'){
+        const page=await pdfDoc.getPage(pb.page);
+        const scale=dpi/72;
+        const vp=page.getViewport({scale});
+        const c=document.createElement('canvas');
+        c.width=Math.ceil(vp.width); c.height=Math.ceil(vp.height);
+        const ctx=c.getContext('2d');
+        ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,c.width,c.height);
+        await page.render({canvasContext:ctx,viewport:vp}).promise;
+        src=c;
+      }else{
+        src=pb.canvas;
+        if(dpi===300){ // upscale image source for print quality
+          const s=Math.min(3, 1011/Math.max(src.width,src.height)*2);
+          if(s>1.2){
+            const c=document.createElement('canvas');
+            c.width=Math.round(src.width*s); c.height=Math.round(src.height*s);
+            c.getContext('2d').drawImage(src,0,0,c.width,c.height);
+            src=c;
+          }
+        }
+      }
+      // card dims in mm
+      let wMm=cw,hMm=ch;
+      const pagePortrait=src.height>=src.width;
+      if(orient==='auto'){ if(pagePortrait){wMm=Math.min(cw,ch);hMm=Math.max(cw,ch);} }
+      else if(orient==='portrait'){wMm=Math.min(cw,ch);hMm=Math.max(cw,ch);}
+      else{wMm=Math.max(cw,ch);hMm=Math.min(cw,ch);}
+      // card canvas at target dpi
+      const pxPerMm=dpi/25.4;
+      const card=document.createElement('canvas');
+      card.width=Math.round(wMm*pxPerMm); card.height=Math.round(hMm*pxPerMm);
+      const ctx=card.getContext('2d');
+      ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,card.width,card.height);
+      const cr=card.width/card.height, sr=src.width/src.height;
+      let dw,dh;
+      if(fit==='fit'){ const k=sr>cr?[card.width/src.width,0]:[0,card.height/src.height];
+        const s=sr>cr?card.width/src.width:card.height/src.height; dw=src.width*s; dh=src.height*s; }
+      else{ const s=sr>cr?card.height/src.height:card.width/src.width; dw=src.width*s; dh=src.height*s; }
+      ctx.imageSmoothingQuality='high';
+      ctx.drawImage(src,(card.width-dw)/2,(card.height-dh)/2,dw,dh);
+      const label=(pdfDoc&&typeof pb.page==='number')?`${pdfName}-p${pb.page}`:`card-${cards.length+1}`;
+      cards.push({canvas:card,label,wMm,hMm});
+    }
+    renderResults();
+  }catch(e){
+    console.error(e);
+    showErr('Something went wrong while converting. Try a different file.');
+  }
+  $('convertBtn').disabled=false; $('convertBtn').textContent='Convert to ID cards';
+}
+
+function renderResults(){
+  const box=$('results'); box.innerHTML='';
+  cards.forEach((cd,i)=>{
+    const d=document.createElement('div'); d.className='rcard';
+    const img=document.createElement('img'); img.alt=cd.label;
+    img.src=cd.canvas.toDataURL('image/png');
+    const t=document.createElement('div'); t.className='t';
+    t.textContent=`${cd.label} · ${cd.wMm} × ${cd.hMm} mm`;
+    const row=document.createElement('div'); row.className='row';
+    const b=document.createElement('button'); b.className='btn ghost'; b.textContent='⬇ PNG';
+    b.addEventListener('click',()=>downloadPNG(cd));
+    row.appendChild(b);
+    d.append(img,t,row); box.appendChild(d);
+  });
+  $('resInfo').textContent=`${cards.length} card${cards.length>1?'s':''} ready · ${$('dpi').value} DPI · exact print size`;
+  resultCard.classList.remove('hidden');
+  resultCard.scrollIntoView({behavior:'smooth'});
+  buildPrintSheet();
+}
+
+function downloadPNG(cd){
+  const a=document.createElement('a');
+  a.href=cd.canvas.toDataURL('image/png');
+  a.download=cd.label+'.png';
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
+$('dlAllBtn').addEventListener('click', async ()=>{
+  for(const cd of cards){ downloadPNG(cd); await new Promise(r=>setTimeout(r,600)); }
+});
+
+function buildPrintSheet(){
+  const inner=$('sheetInner'); inner.innerHTML='';
+  cards.forEach(cd=>{
+    const d=document.createElement('div'); d.className='pcard';
+    d.style.width=cd.wMm+'mm'; d.style.height=cd.hMm+'mm';
+    const img=document.createElement('img'); img.src=cd.canvas.toDataURL('image/png');
+    d.appendChild(img); inner.appendChild(d);
+  });
+}
+$('printBtn').addEventListener('click', ()=>{ buildPrintSheet(); window.print(); });
+
+$('resetBtn').addEventListener('click', ()=>{
+  pdfDoc=null; pageBitmaps=[]; cards=[]; imgFiles=[];
+  fileInput.value='';
+  $('pages').innerHTML=''; $('results').innerHTML='';
+  settingsCard.classList.add('hidden'); resultCard.classList.add('hidden');
+  window.scrollTo({top:0,behavior:'smooth'});
+});
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+</script>
+</body>
+</html>
